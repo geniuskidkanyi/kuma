@@ -2,12 +2,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import * as api from "./api";
 import { EXTENSIONS, serialize } from "./export";
 import { clock } from "./format";
 import ModelManager from "./components/ModelManager";
 import AfricanLanguages from "./components/AfricanLanguages";
 import TranscriptView from "./components/TranscriptView";
+import AudioPlayer, { type AudioPlayerHandle } from "./components/AudioPlayer";
 import type { ExportFormat, Segment, TranscriptResult } from "./types";
 
 const AUDIO_EXTS = [
@@ -47,10 +49,21 @@ export default function App() {
   const [datasetBusy, setDatasetBusy] = useState(false);
   const [datasetProg, setDatasetProg] = useState<{ done: number; total: number } | null>(null);
   const [datasetMsg, setDatasetMsg] = useState<string | null>(null);
+  const [translate, setTranslate] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const [recording, setRecording] = useState(false);
   const [recLevel, setRecLevel] = useState(0);
   const recStart = useRef<number>(0);
   const [recElapsed, setRecElapsed] = useState(0);
+
+  // Audio playback + transcript follow-along.
+  const [currentMs, setCurrentMs] = useState(0);
+  const playerRef = useRef<AudioPlayerHandle>(null);
+
+  // Find & replace.
+  const [query, setQuery] = useState("");
+  const [replaceText, setReplaceText] = useState("");
+  const [matchIdx, setMatchIdx] = useState(0);
 
   // Subscribe to transcription progress + streamed segments.
   useEffect(() => {
@@ -97,22 +110,44 @@ export default function App() {
     async (path: string) => {
       setError(null);
       setBusy(true);
+      setCancelling(false);
       setProgress(0);
       setSegments([]);
       setResult(null);
+      setCurrentMs(0);
+      setQuery("");
       try {
-        const res = await api.transcribeFile(path, activeModel, language);
+        const res = await api.transcribeFile(
+          path,
+          activeModel,
+          language,
+          translate,
+        );
         setResult(res);
-        setSegments(res.segments);
+        // A cancelled run returns partial segments; keep streamed ones if the
+        // backend returned fewer.
+        setSegments((prev) =>
+          res.segments.length >= prev.length ? res.segments : prev,
+        );
       } catch (e) {
         setError(String(e));
       } finally {
         setBusy(false);
+        setCancelling(false);
         setStage("");
       }
     },
-    [activeModel, language],
+    [activeModel, language, translate],
   );
+
+  async function cancelRun() {
+    setCancelling(true);
+    try {
+      await api.cancelTranscription();
+    } catch (e) {
+      setError(String(e));
+    }
+  }
 
   // Native drag-and-drop from the OS.
   useEffect(() => {
@@ -210,10 +245,39 @@ export default function App() {
     }
   }
 
+  function replaceAll() {
+    if (!query) return;
+    const re = new RegExp(
+      query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+      "gi",
+    );
+    setSegments((prev) =>
+      prev.map((s) => ({ ...s, text: s.text.replace(re, replaceText) })),
+    );
+  }
+
   const wordCount = segments.reduce(
     (n, s) => n + s.text.trim().split(/\s+/).filter(Boolean).length,
     0,
   );
+
+  // Audio source for the current transcript (local file via asset protocol).
+  const audioSrc = result ? convertFileSrc(result.source) : null;
+
+  // Segment currently under the playhead.
+  const activeId =
+    segments.find((s) => currentMs >= s.start && currentMs < s.end)?.id ?? null;
+
+  // Search matches.
+  const q = query.trim().toLowerCase();
+  const matchList = q
+    ? segments.filter((s) => s.text.toLowerCase().includes(q)).map((s) => s.id)
+    : [];
+  const matchIds = new Set(matchList);
+  const safeIdx = matchList.length
+    ? ((matchIdx % matchList.length) + matchList.length) % matchList.length
+    : 0;
+  const currentMatchId = matchList.length ? matchList[safeIdx] : null;
 
   return (
     <div className="app">
@@ -244,6 +308,14 @@ export default function App() {
               </option>
             ))}
           </select>
+          <label className="toggle">
+            <input
+              type="checkbox"
+              checked={translate}
+              onChange={(e) => setTranslate(e.target.checked)}
+            />
+            Translate to English
+          </label>
         </div>
 
         <button className="langs-btn" onClick={() => setShowLangs(true)}>
@@ -332,6 +404,9 @@ export default function App() {
               {stage === "loading_model" && "Loading model…"}
               {stage === "transcribing" && `Transcribing… ${(progress * 100).toFixed(0)}%`}
             </span>
+            <button className="cancel-btn" onClick={cancelRun} disabled={cancelling}>
+              {cancelling ? "Stopping…" : "Cancel"}
+            </button>
           </div>
         )}
 
@@ -359,7 +434,59 @@ export default function App() {
                 <span>{wordCount} words</span>
               </div>
             )}
-            <TranscriptView segments={segments} onEdit={editSegment} />
+
+            {result && audioSrc && (
+              <AudioPlayer ref={playerRef} src={audioSrc} onTime={setCurrentMs} />
+            )}
+
+            {result && (
+              <div className="search-bar">
+                <input
+                  className="search-input"
+                  placeholder="Find…"
+                  value={query}
+                  onChange={(e) => {
+                    setQuery(e.target.value);
+                    setMatchIdx(0);
+                  }}
+                />
+                <span className="match-count">
+                  {query ? `${matchList.length ? safeIdx + 1 : 0}/${matchList.length}` : ""}
+                </span>
+                <button
+                  className="ghost"
+                  disabled={!matchList.length}
+                  onClick={() => setMatchIdx((i) => i - 1)}
+                >
+                  ‹
+                </button>
+                <button
+                  className="ghost"
+                  disabled={!matchList.length}
+                  onClick={() => setMatchIdx((i) => i + 1)}
+                >
+                  ›
+                </button>
+                <input
+                  className="search-input"
+                  placeholder="Replace…"
+                  value={replaceText}
+                  onChange={(e) => setReplaceText(e.target.value)}
+                />
+                <button className="ghost" disabled={!query} onClick={replaceAll}>
+                  Replace all
+                </button>
+              </div>
+            )}
+
+            <TranscriptView
+              segments={segments}
+              onEdit={editSegment}
+              activeId={activeId}
+              onSeek={(ms) => playerRef.current?.seek(ms)}
+              matchIds={matchIds}
+              currentMatchId={currentMatchId}
+            />
           </>
         )}
       </main>

@@ -6,10 +6,17 @@ mod models;
 mod recording;
 mod whisper;
 
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+
 use recording::RecorderState;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 
 type CmdResult<T> = Result<T, String>;
+
+/// Shared flag used to abort an in-flight transcription.
+#[derive(Default)]
+struct CancelFlag(Arc<AtomicBool>);
 
 fn err<E: std::fmt::Display>(e: E) -> String {
     e.to_string()
@@ -92,13 +99,23 @@ async fn transcribe_file(
     path: String,
     model_id: String,
     language: Option<String>,
+    translate: bool,
 ) -> CmdResult<whisper::TranscriptResult> {
+    // Reset the cancel flag for this run and hand a clone to the worker.
+    let cancel = app.state::<CancelFlag>().0.clone();
+    cancel.store(false, Ordering::Relaxed);
     tauri::async_runtime::spawn_blocking(move || {
-        whisper::transcribe(&app, &path, &model_id, language)
+        whisper::transcribe(&app, &path, &model_id, language, translate, cancel)
     })
     .await
     .map_err(err)?
     .map_err(err)
+}
+
+/// Request that the current transcription stop early.
+#[tauri::command]
+fn cancel_transcription(state: State<CancelFlag>) {
+    state.0.store(true, Ordering::Relaxed);
 }
 
 #[tauri::command]
@@ -133,6 +150,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .manage(RecorderState::default())
+        .manage(CancelFlag::default())
         .invoke_handler(tauri::generate_handler![
             list_models,
             accel_backend,
@@ -142,6 +160,7 @@ pub fn run() {
             import_model_from_path,
             import_model_from_url,
             transcribe_file,
+            cancel_transcription,
             export_dataset,
             start_recording,
             stop_recording,

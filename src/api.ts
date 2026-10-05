@@ -44,8 +44,14 @@ export async function transcribeFile(
   path: string,
   modelId: string,
   language: string | null,
+  translate: boolean,
 ): Promise<TranscriptResult> {
-  return invoke("transcribe_file", { path, modelId, language });
+  return invoke("transcribe_file", { path, modelId, language, translate });
+}
+
+/** Ask the running transcription to stop early (returns partial results). */
+export async function cancelTranscription(): Promise<void> {
+  return invoke("cancel_transcription");
 }
 
 export interface DatasetSummary {

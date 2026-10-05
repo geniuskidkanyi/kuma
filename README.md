@@ -15,6 +15,9 @@ making speech-to-text work for **African languages**.
   meter, then transcribe.
 - ✏️ **Edit + export** — inline-editable transcript with timestamps; export to
   **SRT**, **VTT**, and **TXT**.
+- ▶️ **Play along** — built-in audio player with a live-highlighted, click-to-seek
+  transcript; **find & replace**; **translate to English** on the fly; and a
+  **Cancel** button to stop a long run (keeping partial results).
 - 🎁 **Contribute dataset** — turn a corrected transcript into a training-ready
   speech dataset: each segment becomes a 16 kHz clip paired with its verified
   text in a Hugging Face `audiofolder` / Common Voice–style `metadata.csv`.

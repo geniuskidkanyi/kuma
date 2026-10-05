@@ -1,6 +1,7 @@
 //! Transcription via whisper.cpp (through the `whisper-rs` bindings).
 
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
@@ -86,6 +87,8 @@ pub fn transcribe(
     path: &str,
     model_id: &str,
     language: Option<String>,
+    translate: bool,
+    cancel: Arc<AtomicBool>,
 ) -> anyhow::Result<TranscriptResult> {
     let model_path = models::model_path(app, model_id)?;
     if !model_path.exists() {
@@ -119,7 +122,8 @@ pub fn transcribe(
         .map(|n| n.get() as i32)
         .unwrap_or(4);
     params.set_n_threads(threads);
-    params.set_translate(false);
+    // When true, whisper transcribes *and translates* the speech to English.
+    params.set_translate(translate);
     params.set_print_progress(false);
     params.set_print_realtime(false);
     params.set_print_special(false);
@@ -162,6 +166,11 @@ pub fn transcribe(
             },
         );
     });
+
+    // Allow the UI to abort a long run. The callback returns true to stop;
+    // whisper then returns whatever it has decoded so far.
+    let cancel_cb = cancel.clone();
+    params.set_abort_callback_safe(move || cancel_cb.load(Ordering::Relaxed));
 
     // 4. Run.
     emit_stage(app, "transcribing", 0.0);
