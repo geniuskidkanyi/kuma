@@ -48,6 +48,31 @@ export async function transcribeFile(
   return invoke("transcribe_file", { path, modelId, language });
 }
 
+export interface DatasetSummary {
+  clips: number;
+  skipped: number;
+  totalDurationMs: number;
+  outDir: string;
+}
+
+/** Export the (corrected) transcript as a speech dataset under `outDir`. */
+export async function exportDataset(
+  source: string,
+  segments: { start: number; end: number; text: string }[],
+  language: string,
+  outDir: string,
+): Promise<DatasetSummary> {
+  return invoke("export_dataset", { source, segments, language, outDir });
+}
+
+export async function onDatasetProgress(
+  cb: (p: { done: number; total: number }) => void,
+): Promise<UnlistenFn> {
+  return listen<{ done: number; total: number }>("dataset://progress", (e) =>
+    cb(e.payload),
+  );
+}
+
 export async function startRecording(): Promise<void> {
   return invoke("start_recording");
 }

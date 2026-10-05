@@ -15,6 +15,11 @@ making speech-to-text work for **African languages**.
   meter, then transcribe.
 - ✏️ **Edit + export** — inline-editable transcript with timestamps; export to
   **SRT**, **VTT**, and **TXT**.
+- 🎁 **Contribute dataset** — turn a corrected transcript into a training-ready
+  speech dataset: each segment becomes a 16 kHz clip paired with its verified
+  text in a Hugging Face `audiofolder` / Common Voice–style `metadata.csv`.
+  100% local (nothing is uploaded); donate the folder to open African-ASR
+  projects to help fix the data scarcity that holds these languages back.
 - 📦 **Model manager** — download / switch / remove Whisper models
   (tiny → large-v3) from within the app, with download progress.
 - 🌍 **Import community models** — load any fine-tuned GGML model from a

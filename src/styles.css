@@ -625,3 +625,21 @@ button.rec.active {
   background: rgba(255, 93, 93, 0.1);
   border-bottom: 1px solid rgba(255, 93, 93, 0.3);
 }
+.ok.banner {
+  padding: 10px 20px;
+  color: var(--ok);
+  background: rgba(76, 208, 125, 0.1);
+  border-bottom: 1px solid rgba(76, 208, 125, 0.3);
+  font-size: 13px;
+  word-break: break-all;
+}
+
+button.contribute {
+  background: rgba(76, 208, 125, 0.12);
+  border-color: rgba(76, 208, 125, 0.4);
+  color: var(--ok);
+  font-weight: 500;
+}
+button.contribute:hover:not(:disabled) {
+  background: rgba(76, 208, 125, 0.2);
+}

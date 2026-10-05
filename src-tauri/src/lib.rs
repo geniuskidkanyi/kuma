@@ -1,6 +1,7 @@
 //! MyWhisper — Tauri command surface.
 
 mod audio;
+mod dataset;
 mod models;
 mod recording;
 mod whisper;
@@ -101,6 +102,22 @@ async fn transcribe_file(
 }
 
 #[tauri::command]
+async fn export_dataset(
+    app: AppHandle,
+    source: String,
+    segments: Vec<dataset::DatasetSegment>,
+    language: String,
+    out_dir: String,
+) -> CmdResult<dataset::DatasetSummary> {
+    tauri::async_runtime::spawn_blocking(move || {
+        dataset::export(&app, &source, &segments, &language, &out_dir)
+    })
+    .await
+    .map_err(err)?
+    .map_err(err)
+}
+
+#[tauri::command]
 fn start_recording(app: AppHandle, state: State<RecorderState>) -> CmdResult<()> {
     recording::start(&app, &state).map_err(err)
 }
@@ -125,6 +142,7 @@ pub fn run() {
             import_model_from_path,
             import_model_from_url,
             transcribe_file,
+            export_dataset,
             start_recording,
             stop_recording,
         ])

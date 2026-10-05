@@ -44,6 +44,9 @@ export default function App() {
 
   const [backend, setBackend] = useState<string>("");
   const [showLangs, setShowLangs] = useState(false);
+  const [datasetBusy, setDatasetBusy] = useState(false);
+  const [datasetProg, setDatasetProg] = useState<{ done: number; total: number } | null>(null);
+  const [datasetMsg, setDatasetMsg] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
   const [recLevel, setRecLevel] = useState(0);
   const recStart = useRef<number>(0);
@@ -66,6 +69,14 @@ export default function App() {
   // Report the active compute backend (Metal / CUDA / CPU …).
   useEffect(() => {
     api.accelBackend().then(setBackend).catch(() => setBackend(""));
+  }, []);
+
+  // Dataset export progress.
+  useEffect(() => {
+    const un = api.onDatasetProgress(setDatasetProg);
+    return () => {
+      un.then((f) => f());
+    };
   }, []);
 
   // Recording level meter + elapsed timer.
@@ -169,6 +180,36 @@ export default function App() {
     if (path) await writeTextFile(path, content);
   }
 
+  async function contributeDataset() {
+    if (!result) return;
+    const dir = await open({
+      directory: true,
+      title: "Choose a folder for the dataset",
+    });
+    if (typeof dir !== "string") return;
+    setError(null);
+    setDatasetMsg(null);
+    setDatasetProg(null);
+    setDatasetBusy(true);
+    try {
+      const summary = await api.exportDataset(
+        result.source,
+        segments.map((s) => ({ start: s.start, end: s.end, text: s.text })),
+        language ?? result.language,
+        dir,
+      );
+      const mins = (summary.totalDurationMs / 60000).toFixed(1);
+      setDatasetMsg(
+        `Exported ${summary.clips} clip${summary.clips === 1 ? "" : "s"} (${mins} min) to ${summary.outDir}`,
+      );
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setDatasetBusy(false);
+      setDatasetProg(null);
+    }
+  }
+
   const wordCount = segments.reduce(
     (n, s) => n + s.text.trim().split(/\s+/).filter(Boolean).length,
     0,
@@ -256,6 +297,19 @@ export default function App() {
               TXT
             </button>
           </div>
+
+          <button
+            className="contribute"
+            disabled={!result || datasetBusy}
+            onClick={contributeDataset}
+            title="Export corrected clips as an open speech dataset"
+          >
+            {datasetBusy
+              ? datasetProg
+                ? `Exporting ${datasetProg.done}/${datasetProg.total}…`
+                : "Exporting…"
+              : "🎁 Contribute dataset"}
+          </button>
         </header>
 
         {recording && (
@@ -268,6 +322,7 @@ export default function App() {
         )}
 
         {error && <div className="error banner">{error}</div>}
+        {datasetMsg && <div className="ok banner">✓ {datasetMsg}</div>}
 
         {busy && (
           <div className="progress-bar">
