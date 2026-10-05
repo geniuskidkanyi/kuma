@@ -1,5 +1,5 @@
 [package]
-name = "mywhisper"
+name = "kuma"
 version = "0.1.0"
 description = "Kuma — local audio/video transcription powered by whisper.cpp"
 authors = ["Kuma contributors"]
@@ -8,7 +8,7 @@ edition = "2021"
 rust-version = "1.77"
 
 [lib]
-name = "mywhisper_lib"
+name = "kuma_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

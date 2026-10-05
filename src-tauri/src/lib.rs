@@ -1,4 +1,4 @@
-//! MyWhisper — Tauri command surface.
+//! Kuma — Tauri command surface.
 
 mod audio;
 mod dataset;

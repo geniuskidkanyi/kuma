@@ -24,7 +24,7 @@ fn temp_wav_path() -> std::path::PathBuf {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis())
         .unwrap_or(0);
-    std::env::temp_dir().join(format!("mywhisper-rec-{ts}.wav"))
+    std::env::temp_dir().join(format!("kuma-rec-{ts}.wav"))
 }
 
 pub fn start(app: &AppHandle, state: &RecorderState) -> anyhow::Result<()> {
