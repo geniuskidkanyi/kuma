@@ -1,0 +1,61 @@
+[package]
+name = "mywhisper"
+version = "0.1.0"
+description = "Kuma — local audio/video transcription powered by whisper.cpp"
+authors = ["Kuma contributors"]
+license = "MIT"
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "mywhisper_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+hound = "3.5"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
+# Base build is CPU-only everywhere. GPU backends are layered on below:
+#   - macOS gets Metal automatically (ships with the OS, no toolkit needed)
+#   - CUDA / Vulkan / ROCm / CoreML are opt-in via `--features` (need toolkits)
+whisper-rs = { version = "0.16.0", default-features = false }
+cpal = "0.17.1"
+
+[features]
+default = []
+# NVIDIA GPUs (requires the CUDA toolkit at build time):
+#   cargo build --release --features cuda
+cuda = ["whisper-rs/cuda"]
+# Cross-vendor GPUs incl. Intel integrated GPUs, AMD, NVIDIA (requires the
+# Vulkan SDK). This is the easiest way to use an Intel iGPU on Windows/Linux —
+# it draws from shared system RAM, so there is no separate VRAM limit:
+#   cargo build --release --features vulkan
+vulkan = ["whisper-rs/vulkan"]
+# Intel-native stack (oneAPI / SYCL) — often faster than Vulkan on Intel GPUs
+# and iGPUs. Requires the Intel oneAPI toolkit:
+#   cargo build --release --features sycl
+sycl = ["whisper-rs/intel-sycl"]
+# AMD ROCm:
+rocm = ["whisper-rs/hipblas"]
+# Apple Neural Engine (requires a CoreML-converted model alongside the GGML one):
+coreml = ["whisper-rs/coreml"]
+
+# Apple Silicon / macOS: Metal GPU acceleration using the unified memory
+# architecture. Enabled for every macOS build — no extra toolchain required.
+[target.'cfg(target_os = "macos")'.dependencies]
+whisper-rs = { version = "0.16.0", default-features = false, features = ["metal"] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+panic = "abort"
+strip = true
